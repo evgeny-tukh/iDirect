@@ -1,0 +1,56 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "type": "shell",
+        "label": "cl.exe build active file - x64",
+        "command": "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/bin/Hostx64/x64/cl.exe",
+        "args": [
+          "/MTd",
+          "/EHsc",
+          "/Zi",
+          "/Fo:",
+          "build/",
+          "/Fe:",
+          "build/terminal.exe",
+          "terminal.cpp",
+          "wsock32.lib",
+        ],
+        "problemMatcher": ["$msCompile"],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        }
+      },
+      {
+        "type": "shell",
+        "label": "cl.exe build active file - x86",
+        "command": "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/bin/Hostx86/x86/cl.exe",
+        "args": [
+          "/MTd",
+          "/Zi",
+          "/Fo:",
+          "build/",
+          "/Fe:",
+          "build/terminal-x86.exe",
+          "terminal.cpp",
+          "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.17763.0/um/x86/WSock32.Lib",
+          "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/lib/x86/libconcrtd.lib",
+          "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/lib/x86/vcruntimed.lib",
+          "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/lib/x86/msvcrtd.lib",
+          "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.17763.0/ucrt/x86/ucrtd.lib",
+          "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.17763.0/ucrt/x64/libucrtd.lib",
+          "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/lib/x86/libcpmtd.lib",
+          "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/lib/x86/libcmtd.lib",
+          "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.17763.0/um/x86/kernel32.Lib",
+          "/link",
+          "/MACHINE:X86"
+        ],
+        "problemMatcher": ["$msCompile"],
+        "group": {
+          "kind": "build",
+          "isDefault": false
+        }
+      }
+    ]
+}
