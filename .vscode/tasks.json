@@ -51,6 +51,41 @@
           "kind": "build",
           "isDefault": false
         }
+      },
+      {
+        "type": "shell",
+        "label": "cl.exe build active file - x64",
+        "command": "C:/Program Files (x86)/Microsoft Visual Studio/2017/Community/VC/Tools/MSVC/14.16.27023/bin/Hostx64/x64/cl.exe",
+        "args": [
+          "/MTd",
+          "/EHsc",
+          "/Zi",
+          "/Fo:",
+          "build/",
+          "/Fe:",
+          "build/guiterm.exe",
+          "gui.cpp",
+          "worker.cpp",
+          "wsock32.lib",
+          "kernel32.Lib",
+          "user32.lib",
+          "gdi32.lib",
+          "winspool.lib",
+          "comdlg32.lib",
+          "advapi32.lib",
+          "shell32.lib",
+          "ole32.lib",
+          "oleaut32.lib",
+          "Uuid.Lib",
+          "odbc32.lib",
+          "odbccp32.lib",
+          "shlwapi.lib"
+        ],
+        "problemMatcher": ["$msCompile"],
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        }
       }
     ]
 }

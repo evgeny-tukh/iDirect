@@ -19,6 +19,22 @@
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false
+        },
+        {
+            "name": "(Windows) run GUI",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/guiterm.exe",
+            "args": [
+                "-u:admin",
+                "-p:23",
+                "-a:127.0.0.1",
+                "-s:P@55w0rd!"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false
         }
-   ]
+           ]
 }
