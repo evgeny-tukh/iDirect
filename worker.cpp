@@ -6,6 +6,11 @@
 static const char *MODEM = "Modem";
 static const char *AUTHORIZATION = "Authorization";
 
+int getAwaitFollowingString (SOCKET& connection, workerData *data, char *buffer, size_t size, const char *waitFor, const char *reconnectAfter = 0);
+void sendCommand (SOCKET& connection, workerData *data, const char *command);
+void waitForCommandPrompt (SOCKET& connection, workerData *data, char *output = 0);
+void loadBeams (workerData *data, SOCKET& connection);
+
 void addToLog (HWND wnd, char *text) {
     PostMessage (wnd, UM_ADD_TO_LOG, 0, (LPARAM) text);
 }
@@ -55,7 +60,116 @@ void extractBeams (char *buffer, beamList& beams) {
     }
 }
 
-int getData (SOCKET connection, char *buffer, size_t size) {
+SOCKET connectToModem (workerData *data) {
+    SOCKET connection = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    SOCKADDR_IN router;
+
+    data->lastError = 0;
+
+    router.sin_addr.S_un.S_addr = inet_addr (data->addr);
+    router.sin_family = AF_INET;
+    router.sin_port = htons (data->port);
+
+    addToLog (data->wnd, "Connecting to the modem...\n");
+
+    if (connect (connection, (sockaddr *) & router, sizeof (router)) == S_OK) {
+        addToLog (data->wnd, "Connected.\n");            
+    } else {
+        closesocket (connection);
+
+        connection = INVALID_SOCKET;
+
+        addToLog (data->wnd, "Failed.\n");
+    }
+
+    return connection;
+};
+
+void authenticate (workerData *data, SOCKET& connection) {
+    char buffer [2000];
+
+    addToLog (data->wnd, "Waiting for authentication request...\n");
+    getAwaitFollowingString (connection, data, buffer, sizeof (buffer), "Username");
+    addToLog (data->wnd, "Sending user name...\n");
+    sendCommand (connection, data, data->userName);
+    getAwaitFollowingString (connection, data, buffer, sizeof (buffer), "Password");
+    addToLog (data->wnd, "Sending password...\n");
+    sendCommand (connection, data, data->password);
+    Sleep (500);
+    addToLog (data->wnd, "Pulling data...\n");
+    waitForCommandPrompt (connection, data);
+    loadBeams (data, connection);
+}
+
+void reconnect (SOCKET& connection, workerData *data, int wait) {
+    closesocket (connection);
+
+    addToLog (data->wnd, "Connection lost.\n");
+    addToLog (data->wnd, "Cleaning up...\n");
+    
+    PostMessage (data->wnd, UM_REMOVE_ALL_BEAMS, 0, 0);
+
+    data->beams.list.clear ();
+
+    data->beams.selected = 0;
+
+    if (wait > 1) {
+        for (auto i = 30; i > 0; -- i) {
+            char msg [50];
+
+            sprintf (msg, "Waiting for %d sec...\n", i);
+            addToLog (data->wnd, msg);
+
+            Sleep (1000);
+        }
+    } else {
+        Sleep (1000);
+    }
+
+    addToLog (data->wnd, "Reconnecting...\n");
+
+    connection = connectToModem (data);
+
+    if (connection != INVALID_SOCKET) {
+char a[50];
+sprintf(a,"conn %d",(int)connection);
+MessageBox(0,a,"==",MB_OK);
+        WSASetLastError (0);
+
+        data->lastError = 0;
+    }
+
+    authenticate (data, connection);
+}
+
+bool checkConnection (SOCKET& connection, workerData *data) {
+    bool result = true;
+
+    if (data->lastError) {
+        switch (data->lastError) {
+            case WSAENETDOWN:
+            case WSAENOTCONN:
+            case WSAENETRESET:
+            case WSAENOTSOCK:
+            case WSAESHUTDOWN:
+            case WSAECONNABORTED:
+            case WSAETIMEDOUT:
+            case WSAECONNRESET: {
+char a[100];
+sprintf(a,"conn %d, err %d",(int)connection,data->lastError);
+MessageBox(0,a,"!!!",MB_OK);
+                reconnect (connection, data, 1);
+
+                result = false; break;
+            }
+        }
+    }
+
+    return result;
+}
+
+int getData (SOCKET& connection, workerData *data, char *buffer, size_t size) {
     int bytesReceived;
 
     memset (buffer, 0, size);
@@ -63,74 +177,122 @@ int getData (SOCKET connection, char *buffer, size_t size) {
     do {
         bytesReceived = recv (connection, buffer, size, 0);
 
+        data->lastError = bytesReceived == SOCKET_ERROR ? (int) WSAGetLastError () : 0;
+
+        WSASetLastError (0);
+
         Sleep (0);
-    } while (bytesReceived <= 0);
+    } while (!checkConnection (connection, data));
 
     return bytesReceived;
 }
 
-int checkData (SOCKET connection, char *buffer, size_t size) {
+int checkData (SOCKET& connection, workerData *data, char *buffer, size_t size) {
+    int result;
+
     memset (buffer, 0, size);
 
-    return recv (connection, buffer, size, 0);
+    do {
+        result = recv (connection, buffer, size, 0);
+
+        data->lastError = result == SOCKET_ERROR ? WSAGetLastError () : 0;
+
+        WSASetLastError (0);
+    } while (!checkConnection (connection, data));
+
+    return result;
 }
 
-int getAwaitFollowingString (SOCKET connection, char *buffer, size_t size, const char *waitFor) {
+int getAwaitFollowingString (SOCKET& connection, workerData *data, char *buffer, size_t size, const char *waitFor, const char *reconnectAfter) {
     int bytesReceived;
 
     do {
-        bytesReceived = getData (connection, buffer, size);
+        bytesReceived = getData (connection, data, buffer, size);
 
+        if (reconnectAfter && strstr (buffer, reconnectAfter)) {
+            addToLog (data->wnd, "The unit is going to restart.\n");
+char a[100];
+MessageBox(0,itoa(data->lastError,a,10),"???",MB_OK);
+            reconnect (connection, data, 30);
+            break;
+        }
         Sleep (100);
     } while (strstr (buffer, waitFor) == 0);
 
     return bytesReceived;
 }
 
-void sendCommand (SOCKET connection, const char *command) {
+void sendCommand (SOCKET& connection, workerData *data, const char *command) {
     char buffer [200];
 
     strcpy (buffer, command);
     strcat (buffer, "\r\n");
 
-    send (connection, buffer, strlen (buffer), 0);
+    do {
+        int bytesSent = send (connection, buffer, strlen (buffer), 0);
+
+        data->lastError = bytesSent == SOCKET_ERROR ? WSAGetLastError () : 0;
+
+        WSASetLastError (0);
+    } while (!checkConnection (connection, data));
 }
 
-void waitForCommandPrompt (SOCKET connection, char *output = 0) {
+void waitForCommandPrompt (SOCKET& connection, workerData *data, char *output) {
     char buffer [2000];
 
-    getAwaitFollowingString (connection, buffer, sizeof (buffer), ">");
+    getAwaitFollowingString (connection, data, buffer, sizeof (buffer), ">", "Scheduling Service Restart");
 
     if (output)
         strcpy (output, buffer);
 }
 
-void selectBeam (SOCKET connection, workerData *data, uint16_t beamID) {
+void loadBeams (workerData *data, SOCKET& connection) {
+    char buffer [2000];
+
+    addToLog (data->wnd, "Requesting for beam list...\n");
+    sendCommand (connection, data, "beamselector list");
+    Sleep (500);
+    waitForCommandPrompt (connection, data, buffer);
+    extractBeams (buffer, data->beams);
+    addToLog (data->wnd, "Completed.\n");
+
+    for (auto & beam: data->beams.list) {
+        char *beamName = _strdup (beam.name.c_str ());
+
+        PostMessage (data->wnd, UM_ADD_BEAM, beam.id, (LPARAM) beamName);
+    }
+
+    PostMessage (data->wnd, UM_SELECT_BEAM, 0, data->beams.selected);
+}
+
+void selectBeam (SOCKET& connection, workerData *data, uint16_t beamID) {
     char command [100];
 
     addToLog (data->wnd, "Selecting the beam...\n");
+    Sleep (500);
     sprintf (command, "beamselector switch %d -f\n", beamID);
 
-    sendCommand (connection, command);
-    waitForCommandPrompt (connection);
+    sendCommand (connection, data, command);
+    waitForCommandPrompt (connection, data);
     addToLog (data->wnd, "Beam selected.\n");
+    loadBeams (data, connection);
 }
 
-void processConnection (workerData *data, SOCKET connection, char *userName, char *password) {
-    char buffer [2000];
-    int bytesReceived;
+void processConnection (workerData *data, SOCKET& connection) {
+    /*char buffer [2000];
 
     addToLog (data->wnd, "Waiting for authentication request...\n");
-    getAwaitFollowingString (connection, buffer, sizeof (buffer), "Username");
+    getAwaitFollowingString (connection, data, buffer, sizeof (buffer), "Username");
     addToLog (data->wnd, "Sending user name...\n");
     sendCommand (connection, userName);
-    getAwaitFollowingString (connection, buffer, sizeof (buffer), "Password");
+    getAwaitFollowingString (connection, data, buffer, sizeof (buffer), "Password");
     addToLog (data->wnd, "Sending password...\n");
     sendCommand (connection, password);
     Sleep (500);
     addToLog (data->wnd, "Pulling data...\n");
-    waitForCommandPrompt (connection);
-    addToLog (data->wnd, "Requesting for beam list...\n");
+    waitForCommandPrompt (connection, data);
+    loadBeams (data, connection);*/
+    /*addToLog (data->wnd, "Requesting for beam list...\n");
     sendCommand (connection, "beamselector list");
     Sleep (500);
     waitForCommandPrompt (connection, buffer);
@@ -143,9 +305,9 @@ void processConnection (workerData *data, SOCKET connection, char *userName, cha
         PostMessage (data->wnd, UM_ADD_BEAM, beam.id, (LPARAM) beamName);
     }
 
-    PostMessage (data->wnd, UM_SELECT_BEAM, 0, data->beams.selected);
+    PostMessage (data->wnd, UM_SELECT_BEAM, 0, data->beams.selected);*/
 
-    while (true) {
+    while (IsWindow (data->wnd)) {
         while (data->messages.size () > 0) {
             auto & msg = data->messages.front ();
 
@@ -156,6 +318,8 @@ void processConnection (workerData *data, SOCKET connection, char *userName, cha
             }
 
             data->messages.pop ();
+
+            checkConnection (connection, data);
         }
 
         Sleep (500);
@@ -167,38 +331,30 @@ unsigned long CALLBACK workerProc (void *param) {
     WSADATA sockData;
     workerData *data = (workerData *) param;
     SOCKET connection;
-    uint16_t port = 23;
-    char addr [50] = {"192.168.1.1"};
-    char userName [50] = {"admin"};
-    char password [50] = {"P@55w0rd!"};
+
+    data->port = 23;
+
+    strcpy (data->addr,"192.168.1.1");
+    strcpy (data->userName, "admin");
+    strcpy (data->password, "P@55w0rd!");
 
     GetModuleFileName (0, path, sizeof (path));
     PathRemoveFileSpec (path);
     PathAppend (path, "iDirect.ini");
     
-    port = GetPrivateProfileInt (MODEM, "Port", 23, path);
+    data->port = GetPrivateProfileInt (MODEM, "Port", 23, path);
 
-    GetPrivateProfileString (MODEM, "Address", "192.168.1.1", addr, sizeof (addr), path);
-    GetPrivateProfileString (AUTHORIZATION, "Username", "admin", userName, sizeof (userName), path);
-    GetPrivateProfileString (AUTHORIZATION, "Password", "P@55w0rd!", password, sizeof (password), path);
+    GetPrivateProfileString (MODEM, "Address", "192.168.1.1", data->addr, sizeof (data->addr), path);
+    GetPrivateProfileString (AUTHORIZATION, "Username", "admin", data->userName, sizeof (data->userName), path);
+    GetPrivateProfileString (AUTHORIZATION, "Password", "P@55w0rd!", data->password, sizeof (data->password), path);
 
     WSAStartup (MAKEWORD (2, 2), & sockData);
 
-    connection = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    connection = connectToModem (data);
 
-    SOCKADDR_IN router;
-
-    router.sin_addr.S_un.S_addr = inet_addr (addr);
-    router.sin_family = AF_INET;
-    router.sin_port = htons (port);
-
-    addToLog (data->wnd, "Connecting to the modem...\n");
-
-    if (connect (connection, (sockaddr *) & router, sizeof (router)) == S_OK) {
-        addToLog (data->wnd, "Connected.\n");
-        processConnection (data, connection, userName, password);
-    } else {
-        addToLog (data->wnd, "Failed.\n");
+    if (connection != INVALID_SOCKET) {
+        authenticate (data, connection);
+        processConnection (data, connection);
     }
 
     closesocket (connection);

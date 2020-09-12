@@ -52,15 +52,35 @@ void processNotification (HWND wnd, workerData *data, NMHDR *genericHeader) {
         NMLISTVIEW *header = (NMLISTVIEW *) genericHeader;
 
         switch (header->hdr.code) {
-            case LVN_ITEMCHANGED: {
+            case NM_CLICK: {
+                NMITEMACTIVATE *header = (NMITEMACTIVATE *) genericHeader;
+
+                if (header->iItem >= 0) {
+                    LVITEM item;
+
+                    item.mask = LVIF_PARAM;
+                    item.iItem = header->iItem;
+
+                    SendDlgItemMessage (wnd, IDC_BEAMS, LVM_GETITEM, 0, (LPARAM) & item);
+                    SendDlgItemMessage (wnd, IDC_BEAMS, LVM_DELETEALLITEMS, 0, 0);
+
+                    data->messages.emplace (msgType::SELECT_BEAM, (uint32_t) item.lParam);
+                }
+
+                break;
+            }
+
+            /*case LVN_ITEMCHANGED: {
                 if (header->iItem >= 0 && header->uChanged & LVIF_STATE) {
-                    if (header->uNewState & LVIS_SELECTED && data->beams.selected != header->lParam) {
+                    if ((header->uNewState & LVIS_SELECTED) && (header->uOldState & LVIS_SELECTED) == 0 && (!data->beams.ignoreBeamClick && data->beams.selected != header->lParam)) {
+                        SendDlgItemMessage (wnd, IDC_BEAMS, LVM_DELETEALLITEMS, 0, 0);
+
                         data->messages.emplace (msgType::SELECT_BEAM, (uint32_t) header->lParam);
                     }
                 }
 
                 break;
-            }
+            }*/
         }
     }
 }
@@ -69,10 +89,22 @@ LRESULT CALLBACK wndProc (HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static workerData *data = 0;
 
     switch (msg) {
+        case UM_REMOVE_ALL_BEAMS: {
+            data->beams.selected = 0;
+
+            SendDlgItemMessage (wnd, IDC_BEAMS, LVM_DELETEALLITEMS, 0, 0); break;
+        }
+
         case UM_ADD_BEAM: {
             HWND beamList = GetDlgItem (wnd, IDC_BEAMS);
             LVITEM item;
             char buffer [10];
+
+            if (wParam & 0x80000000) {
+                SendDlgItemMessage (wnd, IDC_BEAMS, LVM_DELETEALLITEMS, 0, 0);
+
+                wParam &= 0x7FFFFFFF;
+            }
 
             item.pszText = itoa (wParam, buffer, 10);
             item.iItem = 0xFFFF;

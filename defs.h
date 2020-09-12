@@ -6,9 +6,10 @@
 #include <string>
 #include <queue>
 
-#define UM_ADD_TO_LOG   WM_USER + 1
-#define UM_ADD_BEAM     WM_USER + 2
-#define UM_SELECT_BEAM  WM_USER + 3
+#define UM_REMOVE_ALL_BEAMS WM_USER + 4
+#define UM_ADD_TO_LOG       WM_USER + 1
+#define UM_ADD_BEAM         WM_USER + 2
+#define UM_SELECT_BEAM      WM_USER + 3
 
 typedef std::vector<std::string> strings;
 
@@ -21,9 +22,10 @@ struct beam {
 
 struct beamList {
     uint16_t selected;
+    bool ignoreBeamClick;
     std::vector<beam> list;
 
-    beamList () : selected (0) {}
+    beamList () : selected (0), ignoreBeamClick (false) {}
 };
 
 enum msgType {
@@ -43,5 +45,10 @@ struct workerData {
     HWND wnd;
     beamList beams;
     msgQueue messages;
+    char userName [50];
+    char password [50];
+    char addr [50];
+    uint16_t port;
+    int lastError;
 };
 
