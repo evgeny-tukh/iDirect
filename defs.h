@@ -5,11 +5,13 @@
 #include <vector>
 #include <string>
 #include <queue>
+#include <cstdint>
 
 #define UM_REMOVE_ALL_BEAMS WM_USER + 4
 #define UM_ADD_TO_LOG       WM_USER + 1
 #define UM_ADD_BEAM         WM_USER + 2
 #define UM_SELECT_BEAM      WM_USER + 3
+#define UM_SET_STATUS       WM_USER + 5
 
 typedef std::vector<std::string> strings;
 
@@ -50,5 +52,6 @@ struct workerData {
     char addr [50];
     uint16_t port;
     int lastError;
+    uint32_t rxSnrCheckPeriod;
 };
 

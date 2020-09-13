@@ -6,6 +6,12 @@
 
 static const uint16_t IDC_LOG = 100;
 static const uint16_t IDC_BEAMS = 101;
+static const uint16_t IDC_STATUS = 102;
+
+static const int WINDOW_WIDTH = 600;
+static const int WINDOW_HEIGHT = 300;
+static const int LOG_HEIGHT = 100;
+static const int BEAMLIST_WIDTH = 250;
 
 static const char *className = "iDirectTerm";
 
@@ -15,18 +21,23 @@ extern HANDLE startWorker (workerData *data);
 
 void onCreate (HWND wnd) {
     RECT client;
-    HWND logBox, beams;
+    HWND logBox, beams, status;
 
     GetClientRect (wnd, & client);
     
     logBox = CreateWindow (
-        "EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_MULTILINE | ES_READONLY | WS_VSCROLL, 0, client.bottom - 100, client.right + 1, 100, wnd, 
+        "EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_MULTILINE | ES_READONLY | WS_VSCROLL, 0, client.bottom - LOG_HEIGHT, client.right + 1, LOG_HEIGHT, wnd, 
         (HMENU) IDC_LOG, appInstance, 0
     );
 
     beams = CreateWindow (
-        WC_LISTVIEW, "", WS_VISIBLE | WS_TABSTOP | WS_CHILD | WS_BORDER | LVS_REPORT | LVS_NOSORTHEADER | LVS_SHOWSELALWAYS | LVS_SINGLESEL, 0, 0, 250,
-        client.bottom - 100, wnd, (HMENU) IDC_BEAMS, appInstance, 0
+        WC_LISTVIEW, "", WS_VISIBLE | WS_TABSTOP | WS_CHILD | WS_BORDER | LVS_REPORT | LVS_NOSORTHEADER | LVS_SHOWSELALWAYS | LVS_SINGLESEL, 0, 0, BEAMLIST_WIDTH,
+        client.bottom - LOG_HEIGHT, wnd, (HMENU) IDC_BEAMS, appInstance, 0
+    );
+
+    status = CreateWindow (
+        WC_STATIC, "N/A", WS_VISIBLE | WS_CHILD | WS_BORDER | SS_LEFT, BEAMLIST_WIDTH, 0, client.right - BEAMLIST_WIDTH - 1, client.bottom - LOG_HEIGHT, wnd,
+        (HMENU) IDC_STATUS, appInstance, 0
     );
 
     ListView_SetExtendedListViewStyle (beams, LVS_EX_FULLROWSELECT);
@@ -63,6 +74,7 @@ void processNotification (HWND wnd, workerData *data, NMHDR *genericHeader) {
 
                     SendDlgItemMessage (wnd, IDC_BEAMS, LVM_GETITEM, 0, (LPARAM) & item);
                     SendDlgItemMessage (wnd, IDC_BEAMS, LVM_DELETEALLITEMS, 0, 0);
+                    SetDlgItemText (wnd, IDC_STATUS, "N/A");
 
                     data->messages.emplace (msgType::SELECT_BEAM, (uint32_t) item.lParam);
                 }
@@ -89,9 +101,16 @@ LRESULT CALLBACK wndProc (HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static workerData *data = 0;
 
     switch (msg) {
+        case UM_SET_STATUS: {
+            SetDlgItemText (wnd, IDC_STATUS, (const char *) lParam);
+            
+            free ((void *) lParam); break;
+        }
+
         case UM_REMOVE_ALL_BEAMS: {
             data->beams.selected = 0;
 
+            SetDlgItemText (wnd, IDC_STATUS, "N/A");
             SendDlgItemMessage (wnd, IDC_BEAMS, LVM_DELETEALLITEMS, 0, 0); break;
         }
 
@@ -121,6 +140,8 @@ LRESULT CALLBACK wndProc (HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             auto itemNo = ListView_InsertItem (beamList, & item);
 
             ListView_SetItemText (beamList, itemNo, 1, (char *) lParam);
+
+            free ((char *) lParam);
 
             SetFocus (beamList);
 
@@ -213,7 +234,9 @@ int WinMain (HINSTANCE instance, HINSTANCE prevInstance, char *cmdLine, int show
 
     registerClass (instance);
 
-    data.wnd = CreateWindow (className, "iDirect Terminal", WS_VISIBLE | WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 400, 300, HWND_DESKTOP, 0, instance, & data);
+    data.wnd = CreateWindow (
+        className, "iDirect Terminal", WS_VISIBLE | WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, WINDOW_WIDTH, WINDOW_HEIGHT, HWND_DESKTOP, 0, instance, & data
+    );
 
     worker = startWorker (& data);
 

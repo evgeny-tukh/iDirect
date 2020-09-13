@@ -1,10 +1,12 @@
 #include <stdlib.h>
 #include <Windows.h>
 #include <Shlwapi.h>
+#include <time.h>
 #include "defs.h"
 
 static const char *MODEM = "Modem";
 static const char *AUTHORIZATION = "Authorization";
+static const char *SETTINGS = "Settings";
 
 int getAwaitFollowingString (SOCKET& connection, workerData *data, char *buffer, size_t size, const char *waitFor, const char *reconnectAfter = 0);
 void sendCommand (SOCKET& connection, workerData *data, const char *command);
@@ -276,34 +278,24 @@ void selectBeam (SOCKET& connection, workerData *data, uint16_t beamID) {
     loadBeams (data, connection);
 }
 
-void processConnection (workerData *data, SOCKET& connection) {
-    /*char buffer [2000];
+void extractRxSnrData (char *buffer, char *rxSnrData) {
+    strings lines;
+    std::string rxSnrDataString ("RX SNR data\n");
 
-    addToLog (data->wnd, "Waiting for authentication request...\n");
-    getAwaitFollowingString (connection, data, buffer, sizeof (buffer), "Username");
-    addToLog (data->wnd, "Sending user name...\n");
-    sendCommand (connection, userName);
-    getAwaitFollowingString (connection, data, buffer, sizeof (buffer), "Password");
-    addToLog (data->wnd, "Sending password...\n");
-    sendCommand (connection, password);
-    Sleep (500);
-    addToLog (data->wnd, "Pulling data...\n");
-    waitForCommandPrompt (connection, data);
-    loadBeams (data, connection);*/
-    /*addToLog (data->wnd, "Requesting for beam list...\n");
-    sendCommand (connection, "beamselector list");
-    Sleep (500);
-    waitForCommandPrompt (connection, buffer);
-    extractBeams (buffer, data->beams);
-    addToLog (data->wnd, "Completed.\n");
+    splitLines (buffer, lines);
 
-    for (auto & beam: data->beams.list) {
-        char *beamName = _strdup (beam.name.c_str ());
-
-        PostMessage (data->wnd, UM_ADD_BEAM, beam.id, (LPARAM) beamName);
+    for (auto & line: lines) {
+        if (line [0] == 'R' && line [1] == 'x') {
+            rxSnrDataString.append (line);
+            rxSnrDataString.append ("\n");
+        }
     }
 
-    PostMessage (data->wnd, UM_SELECT_BEAM, 0, data->beams.selected);*/
+    strcpy (rxSnrData, rxSnrDataString.c_str ());
+}
+
+void processConnection (workerData *data, SOCKET& connection) {
+    time_t lastRxSnrCheck = 0;
 
     while (IsWindow (data->wnd)) {
         while (data->messages.size () > 0) {
@@ -318,6 +310,24 @@ void processConnection (workerData *data, SOCKET& connection) {
             data->messages.pop ();
 
             checkConnection (connection, data);
+        }
+
+        time_t now = time (0);
+
+        if ((now - lastRxSnrCheck) >= data->rxSnrCheckPeriod) {
+            char buffer [500], rxSnrData [500];
+
+            addToLog (data->wnd, "Requesting RX SNR data...");
+            sendCommand (connection, data, "rx snr");
+            checkConnection (connection, data);
+            waitForCommandPrompt (connection, data, buffer);
+            checkConnection (connection, data);
+            extractRxSnrData (buffer, rxSnrData);
+            addToLog (data->wnd, "done.\n");
+
+            PostMessage (data->wnd, UM_SET_STATUS, 0, (LPARAM) _strdup (rxSnrData));
+            
+            lastRxSnrCheck = now;
         }
 
         Sleep (500);
@@ -341,6 +351,7 @@ unsigned long CALLBACK workerProc (void *param) {
     PathAppend (path, "iDirect.ini");
     
     data->port = GetPrivateProfileInt (MODEM, "Port", 23, path);
+    data->rxSnrCheckPeriod = GetPrivateProfileInt (SETTINGS, "RxSnrCheckPeriod", 1, path);
 
     GetPrivateProfileString (MODEM, "Address", "192.168.1.1", data->addr, sizeof (data->addr), path);
     GetPrivateProfileString (AUTHORIZATION, "Username", "admin", data->userName, sizeof (data->userName), path);
