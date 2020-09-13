@@ -132,9 +132,6 @@ void reconnect (SOCKET& connection, workerData *data, int wait) {
     connection = connectToModem (data);
 
     if (connection != INVALID_SOCKET) {
-char a[50];
-sprintf(a,"conn %d",(int)connection);
-MessageBox(0,a,"==",MB_OK);
         WSASetLastError (0);
 
         data->lastError = 0;
@@ -156,9 +153,6 @@ bool checkConnection (SOCKET& connection, workerData *data) {
             case WSAECONNABORTED:
             case WSAETIMEDOUT:
             case WSAECONNRESET: {
-char a[100];
-sprintf(a,"conn %d, err %d",(int)connection,data->lastError);
-MessageBox(0,a,"!!!",MB_OK);
                 reconnect (connection, data, 1);
 
                 result = false; break;
@@ -211,8 +205,6 @@ int getAwaitFollowingString (SOCKET& connection, workerData *data, char *buffer,
 
         if (reconnectAfter && strstr (buffer, reconnectAfter)) {
             addToLog (data->wnd, "The unit is going to restart.\n");
-char a[100];
-MessageBox(0,itoa(data->lastError,a,10),"???",MB_OK);
             reconnect (connection, data, 30);
             break;
         }
@@ -249,6 +241,8 @@ void waitForCommandPrompt (SOCKET& connection, workerData *data, char *output) {
 void loadBeams (workerData *data, SOCKET& connection) {
     char buffer [2000];
 
+    PostMessage (data->wnd, UM_REMOVE_ALL_BEAMS, 0, 0);
+
     addToLog (data->wnd, "Requesting for beam list...\n");
     sendCommand (connection, data, "beamselector list");
     Sleep (500);
@@ -258,11 +252,15 @@ void loadBeams (workerData *data, SOCKET& connection) {
 
     for (auto & beam: data->beams.list) {
         char *beamName = _strdup (beam.name.c_str ());
+        WPARAM wParam = beam.id;
 
-        PostMessage (data->wnd, UM_ADD_BEAM, beam.id, (LPARAM) beamName);
+        if (beam.id == data->beams.selected)
+            wParam |= 0x80000000;
+
+        PostMessage (data->wnd, UM_ADD_BEAM, wParam, (LPARAM) beamName);
     }
 
-    PostMessage (data->wnd, UM_SELECT_BEAM, 0, data->beams.selected);
+    //PostMessage (data->wnd, UM_SELECT_BEAM, 0, data->beams.selected);
 }
 
 void selectBeam (SOCKET& connection, workerData *data, uint16_t beamID) {

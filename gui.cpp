@@ -25,8 +25,8 @@ void onCreate (HWND wnd) {
     );
 
     beams = CreateWindow (
-        WC_LISTVIEW, "", WS_VISIBLE | WS_CHILD | WS_BORDER | LVS_REPORT | LVS_NOSORTHEADER | LVS_SHOWSELALWAYS | LVS_SINGLESEL, 0, 0, 250, client.bottom - 100, wnd,
-        (HMENU) IDC_BEAMS, appInstance, 0
+        WC_LISTVIEW, "", WS_VISIBLE | WS_TABSTOP | WS_CHILD | WS_BORDER | LVS_REPORT | LVS_NOSORTHEADER | LVS_SHOWSELALWAYS | LVS_SINGLESEL, 0, 0, 250,
+        client.bottom - 100, wnd, (HMENU) IDC_BEAMS, appInstance, 0
     );
 
     ListView_SetExtendedListViewStyle (beams, LVS_EX_FULLROWSELECT);
@@ -99,10 +99,10 @@ LRESULT CALLBACK wndProc (HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HWND beamList = GetDlgItem (wnd, IDC_BEAMS);
             LVITEM item;
             char buffer [10];
+            bool selected = false;
 
             if (wParam & 0x80000000) {
-                SendDlgItemMessage (wnd, IDC_BEAMS, LVM_DELETEALLITEMS, 0, 0);
-
+                selected = true;
                 wParam &= 0x7FFFFFFF;
             }
 
@@ -112,9 +112,17 @@ LRESULT CALLBACK wndProc (HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             item.lParam = wParam;
             item.mask = LVIF_PARAM | LVIF_TEXT;
 
+            if (selected) {
+                item.mask |= LVIF_STATE;
+                item.stateMask = 15;
+                item.state = LVIS_FOCUSED | LVIS_SELECTED;
+            }
+
             auto itemNo = ListView_InsertItem (beamList, & item);
 
             ListView_SetItemText (beamList, itemNo, 1, (char *) lParam);
+
+            SetFocus (beamList);
 
             break;
         }
